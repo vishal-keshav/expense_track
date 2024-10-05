@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Visualizer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        #drop-area {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+            transition: background-color 0.3s;
+        }
+        #drop-area.dragover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto p-8">
+        <div id="drop-area" class="bg-white shadow rounded">
+            Drag the CSV file here or click to upload
+            <input type="file" id="fileElem" class="hidden" onchange="handleFiles(this.files)">
+        </div>
+        <div style="height: 400px;">
+            <canvas id="expenseChart" class="my-8"></canvas>
+        </div>
+    </div>
+
+    <div id="modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden justify-center items-center">
+        <div class="bg-white p-8 rounded-lg shadow-lg w-2/3">
+            <h2 class="text-xl font-bold mb-4" id="modalTitle">Expense Details</h2>
+            <ul id="modalContent" class="list-disc list-inside text-gray-700"></ul>
+            <button class="mt-4 bg-blue-500 text-white py-2 px-4 rounded" onclick="closeModal()">Close</button>
+        </div>
+    </div>
+
+    <script>
+        const dropArea = document.getElementById('drop-area');
+        const fileElem = document.getElementById('fileElem');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalContent = document.getElementById('modalContent');
+        const expenseChart = document.getElementById('expenseChart').getContext('2d');
+        let chart;
+
+        dropArea.addEventListener('click', () => fileElem.click());
+        dropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropArea.classList.add('dragover');
+        });
+        dropArea.addEventListener('dragleave', () => dropArea.classList.remove('dragover'));
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        function handleFiles(files) {
+            const file = files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    displayChart(data);
+                })
+                .catch(error => console.error('Error:', error));
+            }
+        }
+
+        function displayChart(data) {
+            if (chart) {
+                chart.destroy();
+            }
+            chart = new Chart(expenseChart, {
+                type: 'bar',
+                data: {
+                    labels: data.dates,
+                    datasets: [
+                        {
+                            label: 'Total Expenses',
+                            data: data.totals,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            showModal(data.dates[index], data.items[data.dates[index]]);
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: Math.max(...data.totals) * 1.2 // Adjust Y-axis to avoid stretching
+                        }
+                    }
+                }
+            });
+        }
+
+        function showModal(date, items) {
+            modalTitle.innerText = `Expense Details for ${date}`;
+            modalContent.innerHTML = '';
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.innerText = `${item.description} - $${item.amount}`;
+                modalContent.appendChild(li);
+            });
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    </script>
+</body>
+</html>
